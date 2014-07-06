@@ -22,6 +22,13 @@ my $reftime=0;
 my $endtime=0;
 my $timelen=0;
 
+sub extract_sip_addr {
+	my($uri) = @_;
+
+	return ($1,$2) if ($uri =~ /([\w\.]+)@([\w\.]+)/i); # user@domain
+	return ("",$1) if ($uri =~ /:([\w\.]{4,}):/i); # domain only
+}
+
 sub process_pkt 
 {
 	my($user_data, $hdr, $pkt) = @_;
@@ -61,20 +68,34 @@ sub process_pkt
 	if ($ipv4->protocol == NF_IPv4_PROTOCOL_UDP)
 	{
 		$l4proto = Net::Frame::Layer::UDP->new(raw => $raw);
-		$l4proto->unpack();		
+		$l4proto->unpack();
 	}
 
 	my $tcppayload = $l4proto->payload;
-	if ((index $tcppayload, "INVITE ") eq 0) {
-		print "src-ip: $srcip dst-ip: $dstip ";
-		print "\n";
-#		print "payload: $tcppayload\n";
-		my $sip = Net::SIP::Packet->new($tcppayload);
-		print "From: \t" . $sip->get_header( 'From' ) . "\n";
-		print "To: \t" . $sip->get_header( 'To' ) . "\n";
-		print "UA: \t" . $sip->get_header( 'User-Agent' ) . "\n";
-	}
+	if (((index $tcppayload, "INVITE ") eq 0) or
+		 ((index $tcppayload, "BYE ") eq 0)) {
 
+		#print "$tcppayload\n";
+
+		my $sip = Net::SIP::Packet->new($tcppayload);
+		my %sipparts=();
+
+		$sipparts{'timestamp'} = $hdr->{tv_sec};
+		$sipparts{'srcip'} = $srcip;
+		$sipparts{'dstip'} = $dstip;
+
+		($sipparts{'fromuser'} , $sipparts{'fromdomain'}) = extract_sip_addr($sip->get_header('from'));
+		($sipparts{'touser'}   , $sipparts{'todomain'})   = extract_sip_addr($sip->get_header('to'));
+		
+		$sipparts{'callid'} = $sip->get_header('call-id');
+		$sipparts{'useragent'} = $sip->get_header('user-agent');
+		$sipparts{'useragent'} = "" if (!defined $sipparts{'useragent'});
+
+		foreach (sort keys %sipparts) {
+			print "$_: $sipparts{$_}\n";
+		}
+		print "\n\n";
+	}
 
 }
 
@@ -131,6 +152,4 @@ $timelen = $endtime - $reftime;
 
 print STDERR "Packet Count:\t\t $pktcount\n";
 print STDERR "Capture Duration:\t $timelen seconds\n";
-print STDERR "Filter Expression:\t\t$filter\n";
-
-
+print STDERR "Filter Expression:\t$filter\n";
