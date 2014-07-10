@@ -21,6 +21,13 @@ my $curtime=0;
 my $reftime=0;
 my $endtime=0;
 my $timelen=0;
+my $verbose = 0;
+my %supported_frame_types = ( 
+	2048  => 1, # NF_ETH_TYPE_IPv4
+	33024 => 1, # NF_ETH_TYPE_8021Q
+	34525 => 1, # NF_ETH_TYPE_IPv6
+	37120 => 1  # NF_ETH_TYPE_VLAN
+	);
 
 sub extract_sip_addr {
 	my($uri) = @_;
@@ -42,33 +49,37 @@ sub process_pkt
 	## TODO: check if this is actually ethernet frame before decoding
 	my $eth = Net::Frame::Layer::ETH->new(raw => $pkt);
 	$eth->unpack();
-	my $srcmac = $eth->src;
-	my $dstmac = $eth->dst;
-#	print "src-mac: $srcmac dst-mac: $dstmac ";
 
-	return if ($eth->type != NF_ETH_TYPE_IPv4);
+	if (!defined $supported_frame_types{ $eth->type }) {
+		#print "\n\nUnsupported Frame Type: ". $eth->type ."\n\n";
+		return;
+	}
 
 	my $raw="";
 
 	$raw = $eth->payload;
-	my $ipv4 = Net::Frame::Layer::IPv4->new(raw => $raw);
-	$ipv4->unpack();
-	my $srcip = $ipv4->src;
-	my $dstip = $ipv4->dst;
+	my $l3proto = Net::Frame::Layer::IPv4->new(raw => $raw);
+	$l3proto->unpack();
+	my $srcip = $l3proto->src;
+	my $dstip = $l3proto->dst;
 
-	$raw = $ipv4->payload;
+	$raw = $l3proto->payload;
 	my $l4proto;
 
-	if ($ipv4->protocol == NF_IPv4_PROTOCOL_TCP)
+	if ($l3proto->protocol == NF_IPv4_PROTOCOL_TCP)
 	{
 		$l4proto = Net::Frame::Layer::TCP->new(raw => $raw);
 		$l4proto->unpack();
-	}
-	
-	if ($ipv4->protocol == NF_IPv4_PROTOCOL_UDP)
+	} 
+	elsif ($l3proto->protocol == NF_IPv4_PROTOCOL_UDP)
 	{
 		$l4proto = Net::Frame::Layer::UDP->new(raw => $raw);
 		$l4proto->unpack();
+	}
+	else
+	{
+		#if ($verbose) { print "\n\nUnsupported L3 Payload: " . $l3proto->protocol . "\n\n"; }
+		return;
 	}
 
 	my $tcppayload = $l4proto->payload;
@@ -84,8 +95,8 @@ sub process_pkt
 		$sipparts{'srcip'} = $srcip;
 		$sipparts{'dstip'} = $dstip;
 
-		($sipparts{'fromuser'} , $sipparts{'fromdomain'}) = extract_sip_addr($sip->get_header('from'));
-		($sipparts{'touser'}   , $sipparts{'todomain'})   = extract_sip_addr($sip->get_header('to'));
+		($sipparts{'anumber'} , $sipparts{'adomain'}) = extract_sip_addr($sip->get_header('from'));
+		($sipparts{'bnumber'} , $sipparts{'bdomain'}) = extract_sip_addr($sip->get_header('to'));
 		
 		$sipparts{'callid'} = $sip->get_header('call-id');
 		$sipparts{'useragent'} = $sip->get_header('user-agent');
@@ -103,6 +114,7 @@ sub help {
 	print "sipdump [-h] -f pcapfile [-e filter expression]\n";
 	print "\n";
 	print "\t-h\t\thelp\n";
+	print "\t-v\t\tverbose mode\n";
 	print "\t-f pcapfile\tinput file name (required)\n";
 	print "\t-e expression\tfilter expression (tcpdump compatible)\n";
 	print "\n";
@@ -125,18 +137,21 @@ sub dump_data {
 
 my $err ='';  
 my %opts=();
+my $prog_start_time= time();
+my $prog_finish_time= 0;
 
-getopts('he:f:', \%opts);
+getopts('vhe:f:', \%opts);
 
 if (defined $opts{h}) { help(); }
 if (not defined $opts{f}) { help(); }
+if (defined $opts{v}) { $verbose = 1 };
 
 my $inputfile=$opts{f};
 
 # process the pcap again, now do the bps and pps calculation
 my $pcap = Net::Pcap::open_offline($inputfile,\$err) or die "Can't open file...$err\n";
 
-my $filter="tcp or udp";
+my $filter='';
 $filter = $opts{e} if (defined $opts{e});
 
 my $filter_t;
@@ -149,7 +164,15 @@ Net::Pcap::loop($pcap, -1, \&process_pkt, '');
 Net::Pcap::close($pcap);
 
 $timelen = $endtime - $reftime;
+$prog_finish_time= time();
 
-print STDERR "Packet Count:\t\t $pktcount\n";
-print STDERR "Capture Duration:\t $timelen seconds\n";
-print STDERR "Filter Expression:\t$filter\n";
+if ($verbose) {
+	print STDERR "Packet Count:\t\t $pktcount\n";
+	print STDERR "Capture Duration:\t $timelen seconds\n";
+	print STDERR "Filter Expression:\t$filter\n";
+	my $prog_duration = $prog_finish_time - $prog_start_time;
+	print STDERR "Processing Time: $prog_duration seconds\n";
+	$prog_duration = 1 if ($prog_duration < 1);
+	my $avg_pps = $pktcount / $prog_duration;
+	print STDERR "Average number of packets processed per second: $avg_pps\n";
+}
