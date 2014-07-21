@@ -88,7 +88,8 @@ set key box linestyle 99
 set key spacing 1.2
 set nokey
 set grid xtics ytics mytics
-set format y "%.0f"
+set decimal locale  "en_US.UTF-8"
+set format y "%'.0f"
 set size 2
 set size ratio 0.4
 set ylabel "$ylabel"
