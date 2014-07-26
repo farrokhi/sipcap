@@ -2,6 +2,7 @@
 
 use strict;
 use warnings;
+use File::Basename;
 use Net::Pcap;
 use NetPacket::IP;
 use Getopt::Std;
@@ -126,18 +127,17 @@ sub dump_data_double {
 
 
 sub create_graph {
-	my ($dataset) = @_;
+	my $dataset = shift;
+	my $filename = shift . "-" . $dataset . ".png";
+
 	my $ylabel = "";
-	my $filename = "";
 	my $lddinecolor = "";
 	my $plotline = "";
 	my $title = "";
 
-	
 	if ($dataset eq 'pps')
 	{
 		$ylabel = "Packets";
-		$filename = "pps";
 		$title = "Packet Traffic Volume";
 
 		if ($duplex) # full duplex graph
@@ -153,7 +153,6 @@ sub create_graph {
 	if ($dataset eq 'bps')
 	{
 		$ylabel = "Bits";
-		$filename = "bps";
 		$title = "Traffic Volume";
 
 		if ($duplex) # full duplex graph
@@ -180,12 +179,12 @@ set size 2,1.6
 set size ratio 0.4
 set ylabel "$ylabel"
 set xlabel "Time (Seconds)"
-set style line 1 lc rgb '#4d0000' lt 1 lw 3
-set style line 2 lc rgb '#00004d' lt 1 lw 3
+set style line 1 lc rgb '#6d0000' lt 1 lw 3
+set style line 2 lc rgb '#0000cc' lt 1 lw 3
 $plotline
 END_MESSAGE
 
-	open(GNUPLOT, "| gnuplot | epstopdf -f | convert -density 300 - $filename.png");
+	open(GNUPLOT, "| gnuplot | epstopdf -f | convert -colorspace rgb -density 300 - PNG32:$filename");
 	print GNUPLOT $gpi;
 	close(GNUPLOT);
 }
@@ -254,18 +253,20 @@ if ($pktcount < 2) {
 	exit();
 }
 
+my($filename, $dirs, $suffix) = fileparse($inputfile, qr/\.[^.]*/);
+
 if (defined $opts{p})
 {
 	print("Creating PPS graph...");
 	if ($duplex)
 	{
-		dump_data_double(\@pps_src,\@pps_dst); 
+		dump_data_double(\@pps_src, \@pps_dst); 
 	}
 	else
 	{
-		dump_data_single(\@pps_src);
+		dump_data_single(\@pps_src, $filename);
 	}
-	create_graph('pps');
+	create_graph('pps', $filename);
 	print("Done.\n");
 }
 
@@ -274,12 +275,12 @@ if (defined $opts{b})
 	print("Creating BPS graph...");
 	if ($duplex)
 	{
-		dump_data_double(\@bps_src,\@bps_dst); 
+		dump_data_double(\@bps_src, \@bps_dst, $filename); 
 	}
 	else
 	{
-		dump_data_single(\@bps_src);
+		dump_data_single(\@bps_src, $filename);
 	}
-	create_graph('bps');
+	create_graph('bps', $filename);
 	print("Done.\n");
 }
