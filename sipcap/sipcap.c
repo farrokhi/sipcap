@@ -23,6 +23,8 @@
 #define UDP_HDRLEN 8
 #define MAX_PAYLOAD_LEN 5000
 
+#define SIP_INVITE "INVITE "
+
 // Global Structs
 
 /*
@@ -78,6 +80,15 @@ void error(char *msg) {
 	exit(1);
 }
 
+void SIP_parser(char *payload, u_int len)
+{
+	// fprintf(stdout, "\tsizeof: %4lu len: %4u\n", sizeof(SIP_INVITE), len);
+	if (len >= sizeof(SIP_INVITE)) {
+		if (strncmp(SIP_INVITE, payload, sizeof(SIP_INVITE) - 1) == 0) {
+			printf(" (SIP INVITE)");
+		}
+	}
+}
 
 void parse_options(int argc, char *argv[]) {
 
@@ -131,11 +142,14 @@ u_char* handle_UDP
 	char payload_str[MAX_PAYLOAD_LEN];
 
 	udp = (struct udphdr*) packet;
-	fprintf(stdout, "\tsport: %hu  dport: %hu\n", ntohs(udp->uh_sport), ntohs(udp-> uh_dport));
+	fprintf(stdout, "\tsport: %5hu  dport: %5hu", ntohs(udp->uh_sport), ntohs(udp-> uh_dport));
 
 	payload_len = ntohs(udp->uh_ulen) - UDP_HDRLEN;
 
-	if (payload_len <= 0) return NULL;
+	if (payload_len <= 0) {
+		fprintf(stdout, "\n");
+		return NULL;
+	}
 
 	payload_data = packet + UDP_HDRLEN;
 
@@ -144,8 +158,10 @@ u_char* handle_UDP
 	/*
 		Now I have UDP payload as an string here and need to parse it
 	*/
+		SIP_parser(payload_str, payload_len);
 	// printf("\n\n%s\n\n", payload_str);
 
+	fprintf(stdout, "\n");
 	return NULL;
 }
 
@@ -161,7 +177,7 @@ u_char* handle_TCP
 	char payload_str[MAX_PAYLOAD_LEN];
 
 	tcp = (struct tcphdr*) packet;
-	fprintf(stdout, "\tsport: %hu  dport: %hu\n", ntohs(tcp->th_sport), ntohs(tcp-> th_dport));
+	fprintf(stdout, "\tsport: %5hu  dport: %5hu\n", ntohs(tcp->th_sport), ntohs(tcp-> th_dport));
 
 	hlen = (tcp->th_off * 4);
 
@@ -227,6 +243,7 @@ u_char* handle_IP
     if((off & 0x1fff) == 0 )/* aka no 1's in first 13 bits */
     {/* print SOURCE DESTINATION hlen version len offset */
 
+    	fprintf(stdout, "%5d ", pkt_count);
 		switch (ip->ip_p) {
 			case 1:
 				fprintf(stdout, "ICMP");
@@ -255,7 +272,7 @@ u_char* handle_IP
                 inet_ntoa(ip->ip_src),
                 inet_ntoa(ip->ip_dst));
 
-	    fprintf(stdout,"\tlen= %3d hlen = %3d", len, hlen);
+	    // fprintf(stdout,"\tlen= %3d hlen = %3d", len, hlen);
 
 		switch (ip->ip_p) {
 			case 6:
@@ -297,7 +314,6 @@ u_int16_t handle_ethernet
 
     return ether_type;
 }
-
 
 void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet) 
 {
