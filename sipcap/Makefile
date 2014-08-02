@@ -1,5 +1,5 @@
-INC=-I../netmap-libpcap
-LIB=-lpcap 
+INC=-I../netmap-libpcap -I/opt/local/include
+LIB=-lpcap -lpcre
 FLAGS=-m32 -march=corei7 -mfpmath=sse -O3 #-g 
 
 sipcap: sipcap.c Makefile 

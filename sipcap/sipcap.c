@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <getopt.h>
+#include <pcre.h>
 #include <signal.h>
 #include <pcap.h>
 #include <netinet/ip.h>
@@ -71,7 +72,7 @@ void help(int quit)
 	printf("Usage: sipcap [-i <interface>|-f <pcapfile>] [-e expression] [-o outfile] \n");
 	printf("              [-s snaplen] [-h]\n");
 	printf("\n");
-	if (quit) exit(quit);
+	exit(quit);
 }
 
 void error(char *msg) {
@@ -84,7 +85,8 @@ void SIP_parser(char *payload, u_int len)
 {
 	// fprintf(stdout, "\tsizeof: %4lu len: %4u\n", sizeof(SIP_INVITE), len);
 	if (len >= sizeof(SIP_INVITE)) {
-		if (strncmp(SIP_INVITE, payload, sizeof(SIP_INVITE) - 1) == 0) {
+		if (strncmp(SIP_INVITE, payload, sizeof(SIP_INVITE) - 1) == 0) { 
+			// We have a SIP invite - should dig deeper now
 			printf(" (SIP INVITE)");
 		}
 	}
@@ -131,9 +133,7 @@ void parse_options(int argc, char *argv[]) {
 	if (!live_pcap && !offline_pcap) help(1);	
 }
 
-u_char* handle_UDP
-        (u_char *args,const struct pcap_pkthdr* pkthdr,const u_char*
-        packet)
+u_char* handle_UDP (u_char *args,const struct pcap_pkthdr* pkthdr,const u_char* packet)
 {
 	const struct udphdr* udp;
 
@@ -158,16 +158,14 @@ u_char* handle_UDP
 	/*
 		Now I have UDP payload as an string here and need to parse it
 	*/
-		SIP_parser(payload_str, payload_len);
+	// SIP_parser(payload_str, payload_len);
 	// printf("\n\n%s\n\n", payload_str);
 
 	fprintf(stdout, "\n");
 	return NULL;
 }
 
-u_char* handle_TCP
-        (u_char *args,const struct pcap_pkthdr* pkthdr,const u_char*
-        packet, u_int tcplen)
+u_char* handle_TCP (u_char *args,const struct pcap_pkthdr* pkthdr,const u_char* packet, u_int tcplen)
 {
 	const struct tcphdr* tcp;
 
@@ -177,12 +175,15 @@ u_char* handle_TCP
 	char payload_str[MAX_PAYLOAD_LEN];
 
 	tcp = (struct tcphdr*) packet;
-	fprintf(stdout, "\tsport: %5hu  dport: %5hu\n", ntohs(tcp->th_sport), ntohs(tcp-> th_dport));
+	fprintf(stdout, "\tsport: %5hu  dport: %5hu", ntohs(tcp->th_sport), ntohs(tcp-> th_dport));
 
 	hlen = (tcp->th_off * 4);
 
 	payload_len = tcplen - hlen;
-	if (payload_len <= 0) return NULL;
+	if (payload_len <= 0) {
+		fprintf(stdout, "\n");
+		return NULL;
+	}
 
 	payload_data = packet + hlen;
 
@@ -191,7 +192,9 @@ u_char* handle_TCP
 	/*
 		Damn! I have TCP payload here too! Now need to write a parser. 
 	*/
+	SIP_parser(payload_str, payload_len);
 	// printf("\n\n%s\n\n", payload_str);
+	fprintf(stdout, "\n");
 	return NULL;
 }
 
@@ -297,7 +300,7 @@ u_int16_t handle_ethernet
         packet)
 {
     u_int caplen = pkthdr->caplen;
-    u_int length = pkthdr->len;
+    // u_int length = pkthdr->len;
     struct ether_header *eptr;  /* net/ethernet.h */
     u_short ether_type;
 
@@ -343,7 +346,7 @@ int main(int argc, char *argv[])
 	const u_char *packet;
 	struct pcap_pkthdr header;
 	struct bpf_program fp;
-	bpf_u_int32 devnet, devmask;
+	bpf_u_int32 devnet=0, devmask;
 
 	signal(SIGINT, intHandler);
 
