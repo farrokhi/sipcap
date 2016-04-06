@@ -9,11 +9,12 @@ This script requires following modules to be installed from CPAN:
 * Net::Pcap
 * Net::Frame
 * Net::Packet::Layer7
+* Net::SIP
 
 
 # pcaputil.pl
 
-Generates gnuplot definition file from a PCAP file to draw BPS and PPS graphs
+Generates [gnuplot](http://www.gnuplot.info/) definition file from a PCAP file to draw BPS and PPS graphs
 
 ## requirements
 
