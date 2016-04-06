@@ -1,0 +1,3 @@
+[submodule "netmap-libpcap"]
+	path = netmap-libpcap
+	url = https://github.com/luigirizzo/netmap-libpcap.git
